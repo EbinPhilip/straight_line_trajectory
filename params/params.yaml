@@ -1,8 +1,6 @@
 line_follower_node:
- speed_pid: {p: 0.0, i: 0.0, d: 0.0, i_clamp_max: 1.0, publish_state: true}
  heading_pid: {p: 3.2, i: 0.0, d: 0.18, i_clamp_max: 1.0, publish_state: true}
  heading_setpoint: 0.0
  speed_setpoint: 0.0
- max_speed: 1.0
  max_turn_rate: 90.0
- min_step: 0.2
+ min_step: 2

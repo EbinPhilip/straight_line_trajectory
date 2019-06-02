@@ -22,6 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
   angles
   message_generation
   geometry_msgs
+  rqt_reconfigure
 )
 
 ## System dependencies are found with CMake's conventions
@@ -115,7 +116,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
   INCLUDE_DIRS include 
 #  LIBRARIES straight_line_trajectory
-  CATKIN_DEPENDS dynamic_reconfigure gazebo_ros gazebo_ros_control rosbot_description roscpp rospy std_msgs nav_msgs controller_manager control_toolbox effort_controllers angles message_generation geometry_msgs
+  CATKIN_DEPENDS dynamic_reconfigure gazebo_ros gazebo_ros_control rosbot_description roscpp rospy std_msgs nav_msgs controller_manager control_toolbox effort_controllers angles message_generation geometry_msgs rqt_reconfigure
 #  DEPENDS system_lib
 )
 

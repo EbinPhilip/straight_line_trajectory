@@ -63,6 +63,7 @@
   <build_depend>angles</build_depend>
   <build_depend>message_generation</build_depend>
   <build_depend>geometry_msgs</build_depend>
+  <build_depend>rqt_reconfigure</build_depend>
   <build_export_depend>dynamic_reconfigure</build_export_depend>
   <build_export_depend>gazebo_ros</build_export_depend>
   <build_export_depend>gazebo_ros_control</build_export_depend>
@@ -76,6 +77,7 @@
   <build_export_depend>effort_controllers</build_export_depend>
   <build_export_depend>angles</build_export_depend>
   <build_export_depend>geometry_msgs</build_export_depend>
+  <build_export_depend>rqt_reconfigure</build_export_depend>
   <exec_depend>dynamic_reconfigure</exec_depend>
   <exec_depend>gazebo_ros</exec_depend>
   <exec_depend>gazebo_ros_control</exec_depend>
@@ -91,6 +93,7 @@
   <exec_depend>message_generation</exec_depend>
   <exec_depend>message_runtime</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>rqt_reconfigure</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

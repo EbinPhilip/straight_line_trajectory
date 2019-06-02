@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
 	<rosparam file="$(find straight_line_trajectory)/params/params.yaml" command="load"/>
+	<rosparam file="$(find straight_line_trajectory)/params/overdamped.yaml" command="load"/>
 	<include file="$(find rosbot_description)/launch/rosbot_gazebo.launch"></include>
 	<include file="$(find gazebo_ros)/launch/empty_world.launch"></include>
 	<node name="line_follower_node" pkg="straight_line_trajectory" type="line_follower_node"/>

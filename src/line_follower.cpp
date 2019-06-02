@@ -8,24 +8,26 @@ namespace line_follower
 	{
 		this->node_handle = new ros::NodeHandle(n);
 		
+		// Connect publishers to topics
 		this->cmd_vel_publisher = this->node_handle->advertise<geometry_msgs::Twist>("/cmd_vel",1);
-		//this->front_left_publisher = this->node_handle->advertise<std_msgs::Float64>("/front_left_controller/command", 1);
-		//this->front_right_publisher = this->node_handle->advertise<std_msgs::Float64>("/front_right_controller/command", 1);
-		//this->rear_left_publisher = this->node_handle->advertise<std_msgs::Float64>("/rear_left_controller/command", 1);
-		//this->rear_right_publisher = this->node_handle->advertise<std_msgs::Float64>("/rear_right_controller/command", 1);
-		this->speed_PID_publisher = this->node_handle->advertise<straight_line_trajectory::PIDtuning>(this->node_handle->resolveName("speed_PID_tuning"), 1);
+		this->speed_publisher = this->node_handle->advertise<straight_line_trajectory::PIDtuning>(this->node_handle->resolveName("speed_tuning"), 1);
 		this->heading_PID_publisher = this->node_handle->advertise<straight_line_trajectory::PIDtuning>(this->node_handle->resolveName("heading_PID_tuning"), 1);
 		this->crosstrack_error_publisher = this->node_handle->advertise<std_msgs::Float64>(this->node_handle->resolveName("cross_track_error"),1);
 		
-		this->speed_controller.init(ros::NodeHandle(n,"speed_pid"));
+		// Initialize PID controller object
 		this->heading_controller.init(ros::NodeHandle(n,"heading_pid"));
 		
+		// Connect subscribers to topic and callback: Update()
 		this->odom_subscriber = this->node_handle->subscribe("/odom", 1, &line_follower::Update, this);
 		
+		//Intialize PID time stamp
 		this->controller_time_stamp = ros::Time::now();
 		
+		// Setup dynamic reconfigure
 		this->reconfig_server = new dynamic_reconfigure::Server<straight_line_trajectory::line_followerConfig>(n);
+		// Load values from rosparam server
 		this->SetReconfServerConfig();
+		//Set dynamic reconfigure callback 
 		this->reconfig_callback = boost::bind(&line_follower::ReconfigCallback, this, _1, _2);
 		this->reconfig_server->setCallback(this->reconfig_callback);
 	}
@@ -34,80 +36,87 @@ namespace line_follower
 	{
 	}
 	
+	// blocking function, to be called in main() 
 	void line_follower::Run()
 	{
 		ros::spin();
 	}
 	
-	
+	// Callback to odom messages
+	// calculates heading
+	// uses PID to calculate turn rate based on heading error
+	// Sends speed and turn rate(Twist) to motors
 	void line_follower::Update(const nav_msgs::Odometry &odom)
 	{
+		// publisher messages
 		straight_line_trajectory::PIDtuning speed_msg, heading_msg;
 		
+		// get speed and heading from odometry message
 		double current_speed = odom.twist.twist.linear.x;
 		double current_heading = tf::getYaw(odom.pose.pose.orientation);
 		
+		// get desired heading for straight line trajectory
 		double heading = this->ComputeHeadingError(odom.pose.pose.position.x , odom.pose.pose.position.y, current_heading);
 		
+		// populate speed and heading publisher messages
 		speed_msg.desired = this->speed_setpoint;
-		heading_msg.desired = angles::to_degrees(heading);
-		
+		heading_msg.desired = angles::to_degrees(heading) + this->heading_setpoint;
 		speed_msg.actual = current_speed;
 		heading_msg.actual = angles::to_degrees(current_heading);
 		
-		double speed_error = this->speed_setpoint - current_speed;
-		double heading_error = heading - current_heading;
+		// calculate heading error, send to PID
+		double heading_error = angles::from_degrees(this->heading_setpoint) + heading - current_heading;
+		double heading_cmd;
+		this->CalculatePID(heading_error, heading_cmd);
 		
-		double heading_cmd, speed_cmd;
-		this->CalculatePID(heading_error, speed_error, heading_cmd, speed_cmd);
-		this->SendMotorCommands(heading_cmd, speed_cmd);
+		// sends heading command and speed setpoint via /cmd_vel topic
+		this->SendMotorCommands(heading_cmd);
 		
-		this->speed_PID_publisher.publish(speed_msg);
-		this->heading_PID_publisher.publish(heading_msg);
-		
-	}
-
-	void line_follower::ReconfigCallback(straight_line_trajectory::line_followerConfig &config, uint32_t level)
-	{
-		this->SetSpeed(config.speed_setpoint);
-		this->SetHeading(config.heading_setpoint);
-		this->SetMaxSpeed(config.max_speed);
-		this->SetMaxTurnRate(config.max_turn_rate);
-		this->SetMinStep(config.min_step);
-		//this->SetThrottle(config.max_throttle);
-		//this->SetThrottleTrim(config.throttle_trim);
-		//this->reconfig_server->updateConfig(config);
+		// publish speed and heading messages
+		this->speed_publisher.publish(speed_msg);
+		this->heading_PID_publisher.publish(heading_msg);	
 	}
 	
+	// dynamic reconfigure server callback
+	void line_follower::ReconfigCallback(straight_line_trajectory::line_followerConfig &config, uint32_t level)
+	{
+		// Update values obtained to current object
+		this->SetSpeed(config.speed_setpoint);
+		this->SetHeading(config.heading_setpoint);
+		this->SetMaxTurnRate(config.max_turn_rate);
+		this->SetMinStep(config.min_step);
+	}
+	
+	// Initilize dynamic reconfigure server from ros parameter server
 	void line_follower::SetReconfServerConfig()
 	{
-		double speed, heading, max_spd, max_turn, minstep;
+		double speed, heading, max_turn, minstep;
 		straight_line_trajectory::line_followerConfig config;
 		
+		//retrieve rosparams
 		this->node_handle->getParam(this->node_handle->resolveName("speed_setpoint"), speed);
 		this->node_handle->getParam(this->node_handle->resolveName("heading_setpoint"), heading);
-		this->node_handle->getParam(this->node_handle->resolveName("max_speed"), max_spd);
 		this->node_handle->getParam(this->node_handle->resolveName("max_turn_rate"), max_turn);
 		this->node_handle->getParam(this->node_handle->resolveName("min_step"), minstep);
 
+		// populate dynamic reconfigure server message
 		config.speed_setpoint = speed;
 		config.heading_setpoint = heading;
-		config.max_speed = max_spd;
 		config.max_turn_rate = max_turn;
 		config.min_step = minstep;
 		
+		// Set values obtained to current object
 		this->SetSpeed(config.speed_setpoint);
 		this->SetHeading(config.heading_setpoint);
-		this->SetMaxSpeed(config.max_speed);
 		this->SetMaxTurnRate(config.max_turn_rate);
 		this->SetMinStep(config.min_step);
-		//this->SetThrottle(config.max_throttle);
-		//this->SetThrottleTrim(config.throttle_trim);
 		
+		// Update values in server
 		this->reconfig_server->updateConfig(config);
 		
 	}
 	
+	//// setter functions for dynamic reconfigure ////
 	void line_follower::SetSpeed(double speed)
 	{
 		this->speed_setpoint = speed;
@@ -116,21 +125,6 @@ namespace line_follower
 	void line_follower::SetHeading(double heading)
 	{
 		this->heading_setpoint = heading;
-	}
-	
-	//void line_follower::SetThrottle(double throttle)
-	//{
-		//this->max_throttle = throttle;
-	//}
-	
-	//void line_follower::SetThrottleTrim(double trim)
-	//{
-		//this->throttle_trim = trim;
-	//}
-	
-	void line_follower::SetMaxSpeed(double speed)
-	{
-		this->max_speed = speed;
 	}
 	
 	void line_follower::SetMaxTurnRate(double turn_rate)
@@ -142,22 +136,33 @@ namespace line_follower
 	{
 		this->min_step = minstep;
 	}
+	/////////////////////////////////////////////////
 	
+	// Compute heading for straight line trajectory
 	double line_follower::ComputeHeadingError(double x, double y, double curr_heading)
 	{
+		//return if desired speed is zero
 		if (this->speed_setpoint == 0)
 		{
-			return curr_heading;
+			return 0.0;
 		}
+		
+		//calculate distance of vehicle from origin
 		double dist_origin = std::sqrt(x*x + y*y);
 		
+		// calculate and send cross track error
 		std_msgs::Float64 cross_track_error;
 		cross_track_error.data = dist_origin * std::atan2(y, x);
 		this->crosstrack_error_publisher.publish(cross_track_error);
 		
+		// calculate steps to next closest point on straight line trajectory
 		double step_no = std::floor(dist_origin/this->min_step) + (this->speed_setpoint>=0 ? 1:-1)*(x>=0 ? 1:-1);
+		
+		// adjust for both half of x-y plane
 		if (x<0)
 			step_no = -step_no;
+		
+		// calculate heading to next closest point on straight line trajectory
 		double heading ;
 		if (this->speed_setpoint>=0)
 		{
@@ -170,41 +175,32 @@ namespace line_follower
 		return heading;
 	}
 	
-	void line_follower::CalculatePID(double heading_error, double speed_error, double &heading_cmd, double &speed_cmd)
+	// Calculate PID from heading error
+	void line_follower::CalculatePID(double heading_error, double &heading_cmd)
 	{
+		// calculate time difference from last PID call
 		ros::Duration dt = ros::Duration( (ros::Time::now() - this->controller_time_stamp).toSec() );
 		if (dt > ros::Duration(1.0))
 		{
-			this->speed_controller.reset();
 			this->heading_controller.reset();
-		}
-		speed_cmd = this->constrain_double( this->speed_controller.computeCommand(speed_error, dt) );
+		}	
+		// PID output in -1,1 range
 		heading_cmd = this->constrain_double( this->heading_controller.computeCommand(heading_error, dt) );
-		//if ( (std::abs(speed_cmd) + std::abs(heading_cmd) ) > 1.0)
-		//{
-			//speed_cmd = speed_cmd/(std::abs(speed_cmd) + std::abs(heading_cmd));
-			//heading_cmd = heading_cmd/(std::abs(speed_cmd) + std::abs(heading_cmd));
-		//}
-		//left_wheel_command = speed_cmd - heading_cmd;
-		//right_wheel_command = speed_cmd + heading_cmd;
+		// update current time
 		this->controller_time_stamp = ros::Time::now();
 	}
 	
-	void line_follower::SendMotorCommands(double heading_cmd, double speed_cmd)
+	// publish speed and turn rate on /cmd_vel topic
+	void line_follower::SendMotorCommands(double heading_cmd)
 	{
 		geometry_msgs::Twist msg;
 		msg.linear.x = this->speed_setpoint;
+		// get turn rate from PID output by multiplying with max_turn_rate parameter
 		msg.angular.z = heading_cmd * angles::from_degrees(this->max_turn_rate);
 		this->cmd_vel_publisher.publish(msg);
-		//std_msgs::Float64 left_wheel_command, right_wheel_command;
-		//left_wheel_command.data = left_wheel_output * this->max_throttle + this->throttle_trim * (left_wheel_output>=0 ? 1:-1);
-		//right_wheel_command.data = right_wheel_output * this->max_throttle + this->throttle_trim * (right_wheel_output>=0 ? 1:-1);
-		//this->front_left_publisher.publish(left_wheel_command);
-		//this->front_right_publisher.publish(right_wheel_command);
-		//this->rear_left_publisher.publish(left_wheel_command);
-		//this->rear_right_publisher.publish(right_wheel_command);
 	}
 	
+	// to constrain PID output to -1,1 range
 	double line_follower::constrain_double(double val, double limit)
 	{
 		if (std::abs(val) > std::abs(limit))
