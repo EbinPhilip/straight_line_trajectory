@@ -152,7 +152,7 @@ namespace line_follower
 		
 		// calculate and send cross track error
 		std_msgs::Float64 cross_track_error;
-		cross_track_error.data = dist_origin * std::atan2(y, x);
+		cross_track_error.data = dist_origin * std::sin( std::atan2(y, x) );
 		this->crosstrack_error_publisher.publish(cross_track_error);
 		
 		// calculate steps to next closest point on straight line trajectory
